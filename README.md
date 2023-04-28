@@ -1,10 +1,39 @@
-# examples
+[![Build Status](https://travis-ci.org/sebastianbergmann/comparator.svg?branch=master)](https://travis-ci.org/sebastianbergmann/comparator)
 
-这些 examples 旨在帮助你快速了解使用七牛的sdk。这些demo都是可以直接运行的， 但是在运行之前需要填上您自己的参数。
+# Comparator
 
-比如：
+This component provides the functionality to compare PHP values for equality.
 
-* `$bucket`  需要填上您想操作的 [bucket名字](http://developer.qiniu.com/docs/v6/api/overview/concepts.html#bucket)。
-* `$accessKey` 和 `$secretKey` 可以在我们的[管理后台](https://portal.qiniu.com/setting/key)找到。
-* 在进行`视频转码`， `压缩文件`等异步操作时 需要使用到的队列名称也可以在我们[管理后台](https://portal.qiniu.com/mps/pipeline)新建。
+## Installation
+
+You can add this library as a local, per-project dependency to your project using [Composer](https://getcomposer.org/):
+
+    composer require sebastian/comparator
+
+If you only need this library during development, for instance to run your project's test suite, then you should add it as a development-time dependency:
+
+    composer require --dev sebastian/comparator
+
+## Usage
+
+```php
+<?php
+use SebastianBergmann\Comparator\Factory;
+use SebastianBergmann\Comparator\ComparisonFailure;
+
+$date1 = new DateTime('2013-03-29 04:13:35', new DateTimeZone('America/New_York'));
+$date2 = new DateTime('2013-03-29 03:13:35', new DateTimeZone('America/Chicago'));
+
+$factory = new Factory;
+$comparator = $factory->getComparatorFor($date1, $date2);
+
+try {
+    $comparator->assertEquals($date1, $date2);
+    print "Dates match";
+}
+
+catch (ComparisonFailure $failure) {
+    print "Dates don't match";
+}
+```
 

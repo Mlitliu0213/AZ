@@ -1,93 +1,137 @@
 <?php
-// +----------------------------------------------------------------------
-// | ThinkPHP [ WE CAN DO IT JUST THINK IT ]
-// +----------------------------------------------------------------------
-// | Copyright (c) 2006-2016 http://thinkphp.cn All rights reserved.
-// +----------------------------------------------------------------------
-// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
-// +----------------------------------------------------------------------
-// | Author: yunwuxin <448901948@qq.com>
-// +----------------------------------------------------------------------
-namespace think\console\command\optimize;
+namespace Qiniu;
 
-use think\Config as ThinkConfig;
-use think\console\Command;
-use think\console\Input;
-use think\console\input\Argument;
-use think\console\Output;
-
-class Config extends Command
+final class Config
 {
-    /** @var  Output */
-    protected $output;
+    const SDK_VER = '7.2.7';
 
-    protected function configure()
+    const BLOCK_SIZE = 4194304; //4*1024*1024 分块上传块大小，该参数为接口规格，不能修改
+
+    const RSF_HOST = 'rsf.qiniu.com';
+    const API_HOST = 'api.qiniu.com';
+    const RS_HOST = 'rs.qiniu.com';      //RS Host
+    const UC_HOST = 'https://api.qiniu.com';              //UC Host
+    const RTCAPI_HOST = 'http://rtc.qiniuapi.com';
+    const ARGUS_HOST = 'argus.atlab.ai';
+    const RTCAPI_VERSION = 'v3';
+
+    // Zone 空间对应的机房
+    public $zone;
+    //BOOL 是否使用https域名
+    public $useHTTPS;
+    //BOOL 是否使用CDN加速上传域名
+    public $useCdnDomains;
+    // Zone Cache
+    private $zoneCache;
+
+    // 构造函数
+    public function __construct(Zone $z = null)
     {
-        $this->setName('optimize:config')
-            ->addArgument('module', Argument::OPTIONAL, 'Build module config cache .')
-            ->setDescription('Build config and common file cache.');
+        $this->zone = $z;
+        $this->useHTTPS = false;
+        $this->useCdnDomains = false;
+        $this->zoneCache = array();
     }
 
-    protected function execute(Input $input, Output $output)
+    public function getUpHost($accessKey, $bucket)
     {
-        if ($input->getArgument('module')) {
-            $module = $input->getArgument('module') . DS;
+        $zone = $this->getZone($accessKey, $bucket);
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
         } else {
-            $module = '';
+            $scheme = "http://";
         }
 
-        $content = '<?php ' . PHP_EOL . $this->buildCacheContent($module);
-
-        if (!is_dir(RUNTIME_PATH . $module)) {
-            @mkdir(RUNTIME_PATH . $module, 0755, true);
+        $host = $zone->srcUpHosts[0];
+        if ($this->useCdnDomains === true) {
+            $host = $zone->cdnUpHosts[0];
         }
 
-        file_put_contents(RUNTIME_PATH . $module . 'init' . EXT, $content);
-
-        $output->writeln('<info>Succeed!</info>');
+        return $scheme . $host;
     }
 
-    protected function buildCacheContent($module)
+    public function getUpBackupHost($accessKey, $bucket)
     {
-        $content = '';
-        $path    = realpath(APP_PATH . $module) . DS;
-
-        if ($module) {
-            // 加载模块配置
-            $config = ThinkConfig::load(CONF_PATH . $module . 'config' . CONF_EXT);
-
-            // 读取数据库配置文件
-            $filename = CONF_PATH . $module . 'database' . CONF_EXT;
-            ThinkConfig::load($filename, 'database');
-
-            // 加载应用状态配置
-            if ($config['app_status']) {
-                $config = ThinkConfig::load(CONF_PATH . $module . $config['app_status'] . CONF_EXT);
-            }
-            // 读取扩展配置文件
-            if (is_dir(CONF_PATH . $module . 'extra')) {
-                $dir   = CONF_PATH . $module . 'extra';
-                $files = scandir($dir);
-                foreach ($files as $file) {
-                    if (strpos($file, CONF_EXT)) {
-                        $filename = $dir . DS . $file;
-                        ThinkConfig::load($filename, pathinfo($file, PATHINFO_FILENAME));
-                    }
-                }
-            }
+        $zone = $this->getZone($accessKey, $bucket);
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
+        } else {
+            $scheme = "http://";
         }
 
-        // 加载行为扩展文件
-        if (is_file(CONF_PATH . $module . 'tags' . EXT)) {
-            $content .= '\think\Hook::import(' . (var_export(include CONF_PATH . $module . 'tags' . EXT, true)) . ');' . PHP_EOL;
+        $host = $zone->cdnUpHosts[0];
+        if ($this->useCdnDomains === true) {
+            $host = $zone->srcUpHosts[0];
         }
 
-        // 加载公共文件
-        if (is_file($path . 'common' . EXT)) {
-            $content .= substr(php_strip_whitespace($path . 'common' . EXT), 5) . PHP_EOL;
+        return $scheme . $host;
+    }
+
+    public function getRsHost($accessKey, $bucket)
+    {
+        $zone = $this->getZone($accessKey, $bucket);
+
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
+        } else {
+            $scheme = "http://";
         }
 
-        $content .= '\think\Config::set(' . var_export(ThinkConfig::get(), true) . ');';
-        return $content;
+        return $scheme . $zone->rsHost;
+    }
+
+    public function getRsfHost($accessKey, $bucket)
+    {
+        $zone = $this->getZone($accessKey, $bucket);
+
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
+        } else {
+            $scheme = "http://";
+        }
+
+        return $scheme . $zone->rsfHost;
+    }
+
+    public function getIovipHost($accessKey, $bucket)
+    {
+        $zone = $this->getZone($accessKey, $bucket);
+
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
+        } else {
+            $scheme = "http://";
+        }
+
+        return $scheme . $zone->iovipHost;
+    }
+
+    public function getApiHost($accessKey, $bucket)
+    {
+        $zone = $this->getZone($accessKey, $bucket);
+
+        if ($this->useHTTPS === true) {
+            $scheme = "https://";
+        } else {
+            $scheme = "http://";
+        }
+
+        return $scheme . $zone->apiHost;
+    }
+
+    private function getZone($accessKey, $bucket)
+    {
+        $cacheId = "$accessKey:$bucket";
+
+        if (isset($this->zoneCache[$cacheId])) {
+            $zone = $this->zoneCache[$cacheId];
+        } elseif (isset($this->zone)) {
+            $zone = $this->zone;
+            $this->zoneCache[$cacheId] = $zone;
+        } else {
+            $zone = Zone::queryZone($accessKey, $bucket);
+            $this->zoneCache[$cacheId] = $zone;
+        }
+        return $zone;
     }
 }
