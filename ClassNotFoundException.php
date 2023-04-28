@@ -6,25 +6,27 @@
 // +----------------------------------------------------------------------
 // | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
 // +----------------------------------------------------------------------
-// | Author: liu21st <liu21st@gmail.com>
+// | Author: yunwuxin <448901948@qq.com>
 // +----------------------------------------------------------------------
 
-namespace think\log\driver;
+namespace think\exception;
 
-/**
- * 模拟测试输出
- */
-class Test
+class ClassNotFoundException extends \RuntimeException
 {
-    /**
-     * 日志写入接口
-     * @access public
-     * @param array $log 日志信息
-     * @return bool
-     */
-    public function save(array $log = [])
+    protected $class;
+    public function __construct($message, $class = '')
     {
-        return true;
+        $this->message = $message;
+        $this->class   = $class;
     }
 
+    /**
+     * 获取类名
+     * @access public
+     * @return string
+     */
+    public function getClass()
+    {
+        return $this->class;
+    }
 }

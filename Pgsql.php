@@ -13,15 +13,13 @@ namespace think\db\connector;
 
 use PDO;
 use think\db\Connection;
-use think\Log;
 
 /**
- * mysql数据库驱动
+ * Pgsql数据库驱动
  */
-class Mysql extends Connection
+class Pgsql extends Connection
 {
-
-    protected $builder = '\\think\\db\\builder\\Mysql';
+    protected $builder = '\\think\\db\\builder\\Pgsql';
 
     /**
      * 解析pdo连接的dsn信息
@@ -31,17 +29,9 @@ class Mysql extends Connection
      */
     protected function parseDsn($config)
     {
-        if (!empty($config['socket'])) {
-            $dsn = 'mysql:unix_socket=' . $config['socket'];
-        } elseif (!empty($config['hostport'])) {
-            $dsn = 'mysql:host=' . $config['hostname'] . ';port=' . $config['hostport'];
-        } else {
-            $dsn = 'mysql:host=' . $config['hostname'];
-        }
-        $dsn .= ';dbname=' . $config['database'];
-
-        if (!empty($config['charset'])) {
-            $dsn .= ';charset=' . $config['charset'];
+        $dsn = 'pgsql:dbname=' . $config['database'] . ';host=' . $config['hostname'];
+        if (!empty($config['hostport'])) {
+            $dsn .= ';port=' . $config['hostport'];
         }
         return $dsn;
     }
@@ -54,14 +44,10 @@ class Mysql extends Connection
      */
     public function getFields($tableName)
     {
+
         list($tableName) = explode(' ', $tableName);
-        if (false === strpos($tableName, '`')) {
-            if (strpos($tableName, '.')) {
-                $tableName = str_replace('.', '`.`', $tableName);
-            }
-            $tableName = '`' . $tableName . '`';
-        }
-        $sql    = 'SHOW COLUMNS FROM ' . $tableName;
+        $sql             = 'select fields_name as "field",fields_type as "type",fields_not_null as "null",fields_key_name as "key",fields_default as "default",fields_default as "extra" from table_msg(\'' . $tableName . '\');';
+
         $pdo    = $this->query($sql, [], false, true);
         $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
         $info   = [];
@@ -71,10 +57,10 @@ class Mysql extends Connection
                 $info[$val['field']] = [
                     'name'    => $val['field'],
                     'type'    => $val['type'],
-                    'notnull' => (bool) ('' === $val['null']), // not null is empty, null is yes
+                    'notnull' => (bool) ('' !== $val['null']),
                     'default' => $val['default'],
-                    'primary' => (strtolower($val['key']) == 'pri'),
-                    'autoinc' => (strtolower($val['extra']) == 'auto_increment'),
+                    'primary' => !empty($val['key']),
+                    'autoinc' => (0 === strpos($val['extra'], 'nextval(')),
                 ];
             }
         }
@@ -89,7 +75,7 @@ class Mysql extends Connection
      */
     public function getTables($dbName = '')
     {
-        $sql    = !empty($dbName) ? 'SHOW TABLES FROM ' . $dbName : 'SHOW TABLES ';
+        $sql    = "select tablename as Tables_in_test from pg_tables where  schemaname ='public'";
         $pdo    = $this->query($sql, [], false, true);
         $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
         $info   = [];
@@ -107,20 +93,11 @@ class Mysql extends Connection
      */
     protected function getExplain($sql)
     {
-        $pdo    = $this->linkID->query("EXPLAIN " . $sql);
-        $result = $pdo->fetch(PDO::FETCH_ASSOC);
-        $result = array_change_key_case($result);
-        if (isset($result['extra'])) {
-            if (strpos($result['extra'], 'filesort') || strpos($result['extra'], 'temporary')) {
-                Log::record('SQL:' . $this->queryStr . '[' . $result['extra'] . ']', 'warn');
-            }
-        }
-        return $result;
+        return [];
     }
 
     protected function supportSavepoint()
     {
         return true;
     }
-
 }

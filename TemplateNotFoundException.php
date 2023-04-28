@@ -6,25 +6,28 @@
 // +----------------------------------------------------------------------
 // | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
 // +----------------------------------------------------------------------
-// | Author: liu21st <liu21st@gmail.com>
+// | Author: yunwuxin <448901948@qq.com>
 // +----------------------------------------------------------------------
 
-namespace think\log\driver;
+namespace think\exception;
 
-/**
- * 模拟测试输出
- */
-class Test
+class TemplateNotFoundException extends \RuntimeException
 {
-    /**
-     * 日志写入接口
-     * @access public
-     * @param array $log 日志信息
-     * @return bool
-     */
-    public function save(array $log = [])
+    protected $template;
+
+    public function __construct($message, $template = '')
     {
-        return true;
+        $this->message  = $message;
+        $this->template = $template;
     }
 
+    /**
+     * 获取模板文件
+     * @access public
+     * @return string
+     */
+    public function getTemplate()
+    {
+        return $this->template;
+    }
 }

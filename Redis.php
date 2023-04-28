@@ -9,180 +9,120 @@
 // | Author: liu21st <liu21st@gmail.com>
 // +----------------------------------------------------------------------
 
-namespace think\cache\driver;
+namespace think\session\driver;
 
-use think\cache\Driver;
+use SessionHandler;
+use think\Exception;
 
-/**
- * Redis缓存驱动，适合单机部署、有前端代理实现高可用的场景，性能最好
- * 有需要在业务层实现读写分离、或者使用RedisCluster的需求，请使用Redisd驱动
- *
- * 要求安装phpredis扩展：https://github.com/nicolasff/phpredis
- * @author    尘缘 <130775@qq.com>
- */
-class Redis extends Driver
+class Redis extends SessionHandler
 {
-    protected $options = [
-        'host'       => '127.0.0.1',
-        'port'       => 6379,
-        'password'   => '',
-        'select'     => 0,
-        'timeout'    => 0,
-        'expire'     => 0,
-        'persistent' => false,
-        'prefix'     => '',
+    /** @var \Redis */
+    protected $handler = null;
+    protected $config  = [
+        'host'         => '127.0.0.1', // redis主机
+        'port'         => 6379, // redis端口
+        'password'     => '', // 密码
+        'select'       => 0, // 操作库
+        'expire'       => 3600, // 有效期(秒)
+        'timeout'      => 0, // 超时时间(秒)
+        'persistent'   => true, // 是否长连接
+        'session_name' => '', // sessionkey前缀
     ];
 
-    /**
-     * 构造函数
-     * @param array $options 缓存参数
-     * @access public
-     */
-    public function __construct($options = [])
+    public function __construct($config = [])
     {
+        $this->config = array_merge($this->config, $config);
+    }
+
+    /**
+     * 打开Session
+     * @access public
+     * @param string $savePath
+     * @param mixed  $sessName
+     * @return bool
+     * @throws Exception
+     */
+    public function open($savePath, $sessName)
+    {
+        // 检测php环境
         if (!extension_loaded('redis')) {
-            throw new \BadFunctionCallException('not support: redis');
-        }
-        if (!empty($options)) {
-            $this->options = array_merge($this->options, $options);
+            throw new Exception('not support:redis');
         }
         $this->handler = new \Redis;
-        if ($this->options['persistent']) {
-            $this->handler->pconnect($this->options['host'], $this->options['port'], $this->options['timeout'], 'persistent_id_' . $this->options['select']);
-        } else {
-            $this->handler->connect($this->options['host'], $this->options['port'], $this->options['timeout']);
+
+        // 建立连接
+        $func = $this->config['persistent'] ? 'pconnect' : 'connect';
+        $this->handler->$func($this->config['host'], $this->config['port'], $this->config['timeout']);
+
+        if ('' != $this->config['password']) {
+            $this->handler->auth($this->config['password']);
         }
 
-        if ('' != $this->options['password']) {
-            $this->handler->auth($this->options['password']);
+        if (0 != $this->config['select']) {
+            $this->handler->select($this->config['select']);
         }
 
-        if (0 != $this->options['select']) {
-            $this->handler->select($this->options['select']);
-        }
+        return true;
     }
 
     /**
-     * 判断缓存
+     * 关闭Session
      * @access public
-     * @param string $name 缓存变量名
+     */
+    public function close()
+    {
+        $this->gc(ini_get('session.gc_maxlifetime'));
+        $this->handler->close();
+        $this->handler = null;
+        return true;
+    }
+
+    /**
+     * 读取Session
+     * @access public
+     * @param string $sessID
+     * @return string
+     */
+    public function read($sessID)
+    {
+        return (string) $this->handler->get($this->config['session_name'] . $sessID);
+    }
+
+    /**
+     * 写入Session
+     * @access public
+     * @param string $sessID
+     * @param String $sessData
      * @return bool
      */
-    public function has($name)
+    public function write($sessID, $sessData)
     {
-        return $this->handler->exists($this->getCacheKey($name));
-    }
-
-    /**
-     * 读取缓存
-     * @access public
-     * @param string $name 缓存变量名
-     * @param mixed  $default 默认值
-     * @return mixed
-     */
-    public function get($name, $default = false)
-    {
-        $value = $this->handler->get($this->getCacheKey($name));
-        if (is_null($value) || false === $value) {
-            return $default;
-        }
-
-        try {
-            $result = 0 === strpos($value, 'think_serialize:') ? unserialize(substr($value, 16)) : $value;
-        } catch (\Exception $e) {
-            $result = $default;
-        }
-
-        return $result;
-    }
-
-    /**
-     * 写入缓存
-     * @access public
-     * @param string            $name 缓存变量名
-     * @param mixed             $value  存储数据
-     * @param integer|\DateTime $expire  有效时间（秒）
-     * @return boolean
-     */
-    public function set($name, $value, $expire = null)
-    {
-        if (is_null($expire)) {
-            $expire = $this->options['expire'];
-        }
-        if ($expire instanceof \DateTime) {
-            $expire = $expire->getTimestamp() - time();
-        }
-        if ($this->tag && !$this->has($name)) {
-            $first = true;
-        }
-        $key   = $this->getCacheKey($name);
-        $value = is_scalar($value) ? $value : 'think_serialize:' . serialize($value);
-        if ($expire) {
-            $result = $this->handler->setex($key, $expire, $value);
+        if ($this->config['expire'] > 0) {
+            return $this->handler->setex($this->config['session_name'] . $sessID, $this->config['expire'], $sessData);
         } else {
-            $result = $this->handler->set($key, $value);
+            return $this->handler->set($this->config['session_name'] . $sessID, $sessData);
         }
-        isset($first) && $this->setTagItem($key);
-        return $result;
     }
 
     /**
-     * 自增缓存（针对数值缓存）
+     * 删除Session
      * @access public
-     * @param  string    $name 缓存变量名
-     * @param  int       $step 步长
-     * @return false|int
+     * @param string $sessID
+     * @return bool
      */
-    public function inc($name, $step = 1)
+    public function destroy($sessID)
     {
-        $key = $this->getCacheKey($name);
-
-        return $this->handler->incrby($key, $step);
+        return $this->handler->delete($this->config['session_name'] . $sessID) > 0;
     }
 
     /**
-     * 自减缓存（针对数值缓存）
+     * Session 垃圾回收
      * @access public
-     * @param  string    $name 缓存变量名
-     * @param  int       $step 步长
-     * @return false|int
+     * @param string $sessMaxLifeTime
+     * @return bool
      */
-    public function dec($name, $step = 1)
+    public function gc($sessMaxLifeTime)
     {
-        $key = $this->getCacheKey($name);
-
-        return $this->handler->decrby($key, $step);
+        return true;
     }
-
-    /**
-     * 删除缓存
-     * @access public
-     * @param string $name 缓存变量名
-     * @return boolean
-     */
-    public function rm($name)
-    {
-        return $this->handler->delete($this->getCacheKey($name));
-    }
-
-    /**
-     * 清除缓存
-     * @access public
-     * @param string $tag 标签名
-     * @return boolean
-     */
-    public function clear($tag = null)
-    {
-        if ($tag) {
-            // 指定标签清除
-            $keys = $this->getTagItem($tag);
-            foreach ($keys as $key) {
-                $this->handler->delete($key);
-            }
-            $this->rm('tag_' . md5($tag));
-            return true;
-        }
-        return $this->handler->flushDB();
-    }
-
 }

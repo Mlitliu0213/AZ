@@ -9,169 +9,110 @@
 // | Author: liu21st <liu21st@gmail.com>
 // +----------------------------------------------------------------------
 
-namespace think\cache\driver;
+namespace think\session\driver;
 
-use think\cache\Driver;
+use SessionHandler;
+use think\Exception;
 
-class Memcache extends Driver
+class Memcache extends SessionHandler
 {
-    protected $options = [
-        'host'       => '127.0.0.1',
-        'port'       => 11211,
-        'expire'     => 0,
-        'timeout'    => 0, // 超时时间（单位：毫秒）
-        'persistent' => true,
-        'prefix'     => '',
+    protected $handler = null;
+    protected $config  = [
+        'host'         => '127.0.0.1', // memcache主机
+        'port'         => 11211, // memcache端口
+        'expire'       => 3600, // session有效期
+        'timeout'      => 0, // 连接超时时间（单位：毫秒）
+        'persistent'   => true, // 长连接
+        'session_name' => '', // memcache key前缀
     ];
 
-    /**
-     * 构造函数
-     * @param array $options 缓存参数
-     * @access public
-     * @throws \BadFunctionCallException
-     */
-    public function __construct($options = [])
+    public function __construct($config = [])
     {
+        $this->config = array_merge($this->config, $config);
+    }
+
+    /**
+     * 打开Session
+     * @access public
+     * @param string    $savePath
+     * @param mixed     $sessName
+     */
+    public function open($savePath, $sessName)
+    {
+        // 检测php环境
         if (!extension_loaded('memcache')) {
-            throw new \BadFunctionCallException('not support: memcache');
-        }
-        if (!empty($options)) {
-            $this->options = array_merge($this->options, $options);
+            throw new Exception('not support:memcache');
         }
         $this->handler = new \Memcache;
         // 支持集群
-        $hosts = explode(',', $this->options['host']);
-        $ports = explode(',', $this->options['port']);
+        $hosts = explode(',', $this->config['host']);
+        $ports = explode(',', $this->config['port']);
         if (empty($ports[0])) {
             $ports[0] = 11211;
         }
         // 建立连接
         foreach ((array) $hosts as $i => $host) {
             $port = isset($ports[$i]) ? $ports[$i] : $ports[0];
-            $this->options['timeout'] > 0 ?
-            $this->handler->addServer($host, $port, $this->options['persistent'], 1, $this->options['timeout']) :
-            $this->handler->addServer($host, $port, $this->options['persistent'], 1);
+            $this->config['timeout'] > 0 ?
+            $this->handler->addServer($host, $port, $this->config['persistent'], 1, $this->config['timeout']) :
+            $this->handler->addServer($host, $port, $this->config['persistent'], 1);
         }
+        return true;
     }
 
     /**
-     * 判断缓存
+     * 关闭Session
      * @access public
-     * @param string $name 缓存变量名
+     */
+    public function close()
+    {
+        $this->gc(ini_get('session.gc_maxlifetime'));
+        $this->handler->close();
+        $this->handler = null;
+        return true;
+    }
+
+    /**
+     * 读取Session
+     * @access public
+     * @param string $sessID
+     */
+    public function read($sessID)
+    {
+        return (string) $this->handler->get($this->config['session_name'] . $sessID);
+    }
+
+    /**
+     * 写入Session
+     * @access public
+     * @param string    $sessID
+     * @param String    $sessData
      * @return bool
      */
-    public function has($name)
+    public function write($sessID, $sessData)
     {
-        $key = $this->getCacheKey($name);
-        return false !== $this->handler->get($key);
+        return $this->handler->set($this->config['session_name'] . $sessID, $sessData, 0, $this->config['expire']);
     }
 
     /**
-     * 读取缓存
+     * 删除Session
      * @access public
-     * @param string $name 缓存变量名
-     * @param mixed  $default 默认值
-     * @return mixed
-     */
-    public function get($name, $default = false)
-    {
-        $result = $this->handler->get($this->getCacheKey($name));
-        return false !== $result ? $result : $default;
-    }
-
-    /**
-     * 写入缓存
-     * @access public
-     * @param string            $name 缓存变量名
-     * @param mixed             $value  存储数据
-     * @param integer|\DateTime $expire  有效时间（秒）
+     * @param string $sessID
      * @return bool
      */
-    public function set($name, $value, $expire = null)
+    public function destroy($sessID)
     {
-        if (is_null($expire)) {
-            $expire = $this->options['expire'];
-        }
-        if ($expire instanceof \DateTime) {
-            $expire = $expire->getTimestamp() - time();
-        }
-        if ($this->tag && !$this->has($name)) {
-            $first = true;
-        }
-        $key = $this->getCacheKey($name);
-        if ($this->handler->set($key, $value, 0, $expire)) {
-            isset($first) && $this->setTagItem($key);
-            return true;
-        }
-        return false;
+        return $this->handler->delete($this->config['session_name'] . $sessID);
     }
 
     /**
-     * 自增缓存（针对数值缓存）
+     * Session 垃圾回收
      * @access public
-     * @param string    $name 缓存变量名
-     * @param int       $step 步长
-     * @return false|int
+     * @param string $sessMaxLifeTime
+     * @return true
      */
-    public function inc($name, $step = 1)
+    public function gc($sessMaxLifeTime)
     {
-        $key = $this->getCacheKey($name);
-        if ($this->handler->get($key)) {
-            return $this->handler->increment($key, $step);
-        }
-        return $this->handler->set($key, $step);
-    }
-
-    /**
-     * 自减缓存（针对数值缓存）
-     * @access public
-     * @param string    $name 缓存变量名
-     * @param int       $step 步长
-     * @return false|int
-     */
-    public function dec($name, $step = 1)
-    {
-        $key   = $this->getCacheKey($name);
-        $value = $this->handler->get($key) - $step;
-        $res   = $this->handler->set($key, $value);
-        if (!$res) {
-            return false;
-        } else {
-            return $value;
-        }
-    }
-
-    /**
-     * 删除缓存
-     * @param    string  $name 缓存变量名
-     * @param bool|false $ttl
-     * @return bool
-     */
-    public function rm($name, $ttl = false)
-    {
-        $key = $this->getCacheKey($name);
-        return false === $ttl ?
-        $this->handler->delete($key) :
-        $this->handler->delete($key, $ttl);
-    }
-
-    /**
-     * 清除缓存
-     * @access public
-     * @param string $tag 标签名
-     * @return bool
-     */
-    public function clear($tag = null)
-    {
-        if ($tag) {
-            // 指定标签清除
-            $keys = $this->getTagItem($tag);
-            foreach ($keys as $key) {
-                $this->handler->delete($key);
-            }
-            $this->rm('tag_' . md5($tag));
-            return true;
-        }
-        return $this->handler->flush();
+        return true;
     }
 }
