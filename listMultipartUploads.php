@@ -17,34 +17,16 @@ $cosClient = new Qcloud\Cos\Client(
         'credentials'=> array(
             'secretId'  => $secretId ,
             'secretKey' => $secretKey)));
-$local_path = "/data/exampleobject";
 try {
-    $result = $cosClient->upload(
-        $bucket = 'examplebucket-125000000', //格式：BucketName-APPID
-        $key = 'exampleobject',
-        $body = fopen($local_path, 'rb')
-        /*
-        $options = array(
-            'ACL' => 'string',
-            'CacheControl' => 'string',
-            'ContentDisposition' => 'string',
-            'ContentEncoding' => 'string',
-            'ContentLanguage' => 'string',
-            'ContentLength' => integer,
-            'ContentType' => 'string',
-            'Expires' => 'string',
-            'GrantFullControl' => 'string',
-            'GrantRead' => 'string',
-            'GrantWrite' => 'string',
-            'Metadata' => array(
-                'string' => 'string',
-            ),
-            'ContentMD5' => 'string',
-            'ServerSideEncryption' => 'string',
-            'StorageClass' => 'string'
-        )
-        */
-    );
+    $result = $cosClient->listMultipartUploads(array(
+        'Bucket' => 'examplebucket-125000000', //格式：BucketName-APPID
+        'Delimiter' => '/',
+        'EncodingType' => 'url',
+        'KeyMarker' => 'string',
+        'UploadIdMarker' => 'string',
+        'Prefix' => 'prfix',
+        'MaxUploads' => 1000,
+    ));
     // 请求成功
     print_r($result);
 } catch (\Exception $e) {
