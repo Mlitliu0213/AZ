@@ -1,6 +1,4 @@
-logs
-.buildpath
-.project
-.settings
+/composer.lock
+/vendor
 .idea
 .DS_Store
