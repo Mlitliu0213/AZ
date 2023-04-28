@@ -2,194 +2,153 @@
 // Distributed under an MIT license: http://codemirror.net/LICENSE
 
 (function() {
-  var mode = CodeMirror.getMode({indentUnit: 2}, "css");
+  var mode = CodeMirror.getMode({indentUnit: 2}, "php");
   function MT(name) { test.mode(name, mode, Array.prototype.slice.call(arguments, 1)); }
 
-  // Error, because "foobarhello" is neither a known type or property, but
-  // property was expected (after "and"), and it should be in parenthese.
-  MT("atMediaUnknownType",
-     "[def @media] [attribute screen] [keyword and] [error foobarhello] { }");
+  MT('simple_test',
+     '[meta <?php] ' +
+     '[keyword echo] [string "aaa"]; ' +
+     '[meta ?>]');
 
-  // Soft error, because "foobarhello" is not a known property or type.
-  MT("atMediaUnknownProperty",
-     "[def @media] [attribute screen] [keyword and] ([error foobarhello]) { }");
+  MT('variable_interpolation_non_alphanumeric',
+     '[meta <?php]',
+     '[keyword echo] [string "aaa$~$!$@$#$$$%$^$&$*$($)$.$<$>$/$\\$}$\\\"$:$;$?$|$[[$]]$+$=aaa"]',
+     '[meta ?>]');
 
-  // Make sure nesting works with media queries
-  MT("atMediaMaxWidthNested",
-     "[def @media] [attribute screen] [keyword and] ([property max-width]: [number 25px]) { [tag foo] { } }");
+  MT('variable_interpolation_digits',
+     '[meta <?php]',
+     '[keyword echo] [string "aaa$1$2$3$4$5$6$7$8$9$0aaa"]',
+     '[meta ?>]');
 
-  MT("tagSelector",
-     "[tag foo] { }");
+  MT('variable_interpolation_simple_syntax_1',
+     '[meta <?php]',
+     '[keyword echo] [string "aaa][variable-2 $aaa][string .aaa"];',
+     '[meta ?>]');
 
-  MT("classSelector",
-     "[qualifier .foo-bar_hello] { }");
+  MT('variable_interpolation_simple_syntax_2',
+     '[meta <?php]',
+     '[keyword echo] [string "][variable-2 $aaaa][[','[number 2]',         ']][string aa"];',
+     '[keyword echo] [string "][variable-2 $aaaa][[','[number 2345]',      ']][string aa"];',
+     '[keyword echo] [string "][variable-2 $aaaa][[','[number 2.3]',       ']][string aa"];',
+     '[keyword echo] [string "][variable-2 $aaaa][[','[variable aaaaa]',   ']][string aa"];',
+     '[keyword echo] [string "][variable-2 $aaaa][[','[variable-2 $aaaaa]',']][string aa"];',
 
-  MT("idSelector",
-     "[builtin #foo] { [error #foo] }");
+     '[keyword echo] [string "1aaa][variable-2 $aaaa][[','[number 2]',         ']][string aa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa][[','[number 2345]',      ']][string aa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa][[','[number 2.3]',       ']][string aa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa][[','[variable aaaaa]',   ']][string aa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa][[','[variable-2 $aaaaa]',']][string aa"];',
+     '[meta ?>]');
 
-  MT("tagSelectorUnclosed",
-     "[tag foo] { [property margin]: [number 0] } [tag bar] { }");
+  MT('variable_interpolation_simple_syntax_3',
+     '[meta <?php]',
+     '[keyword echo] [string "aaa][variable-2 $aaaa]->[variable aaaaa][string .aaaaaa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa][string ->][variable-2 $aaaaa][string .aaaaaa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa]->[variable aaaaa][string [[2]].aaaaaa"];',
+     '[keyword echo] [string "aaa][variable-2 $aaaa]->[variable aaaaa][string ->aaaa2.aaaaaa"];',
+     '[meta ?>]');
 
-  MT("tagStringNoQuotes",
-     "[tag foo] { [property font-family]: [variable hello] [variable world]; }");
+  MT('variable_interpolation_escaping',
+     '[meta <?php] [comment /* Escaping */]',
+     '[keyword echo] [string "aaa\\$aaaa->aaa.aaa"];',
+     '[keyword echo] [string "aaa\\$aaaa[[2]]aaa.aaa"];',
+     '[keyword echo] [string "aaa\\$aaaa[[asd]]aaa.aaa"];',
+     '[keyword echo] [string "aaa{\\$aaaa->aaa.aaa"];',
+     '[keyword echo] [string "aaa{\\$aaaa[[2]]aaa.aaa"];',
+     '[keyword echo] [string "aaa{\\aaaaa[[asd]]aaa.aaa"];',
+     '[keyword echo] [string "aaa\\${aaaa->aaa.aaa"];',
+     '[keyword echo] [string "aaa\\${aaaa[[2]]aaa.aaa"];',
+     '[keyword echo] [string "aaa\\${aaaa[[asd]]aaa.aaa"];',
+     '[meta ?>]');
 
-  MT("tagStringDouble",
-     "[tag foo] { [property font-family]: [string \"hello world\"]; }");
+  MT('variable_interpolation_complex_syntax_1',
+     '[meta <?php]',
+     '[keyword echo] [string "aaa][variable-2 $]{[variable aaaa]}[string ->aaa.aaa"];',
+     '[keyword echo] [string "aaa][variable-2 $]{[variable-2 $aaaa]}[string ->aaa.aaa"];',
+     '[keyword echo] [string "aaa][variable-2 $]{[variable-2 $aaaa][[','  [number 42]',']]}[string ->aaa.aaa"];',
+     '[keyword echo] [string "aaa][variable-2 $]{[variable aaaa][meta ?>]aaaaaa');
 
-  MT("tagStringSingle",
-     "[tag foo] { [property font-family]: [string 'hello world']; }");
+  MT('variable_interpolation_complex_syntax_2',
+     '[meta <?php] [comment /* Monsters */]',
+     '[keyword echo] [string "][variable-2 $]{[variable aaa][comment /*}?>} $aaa<?php } */]}[string ->aaa.aaa"];',
+     '[keyword echo] [string "][variable-2 $]{[variable aaa][comment /*}?>*/][[','  [string "aaa][variable-2 $aaa][string {}][variable-2 $]{[variable aaa]}[string "]',']]}[string ->aaa.aaa"];',
+     '[keyword echo] [string "][variable-2 $]{[variable aaa][comment /*} } $aaa } */]}[string ->aaa.aaa"];');
 
-  MT("tagColorKeyword",
-     "[tag foo] {",
-     "  [property color]: [keyword black];",
-     "  [property color]: [keyword navy];",
-     "  [property color]: [keyword yellow];",
-     "}");
 
-  MT("tagColorHex3",
-     "[tag foo] { [property background]: [atom #fff]; }");
+  function build_recursive_monsters(nt, t, n){
+    var monsters = [t];
+    for (var i = 1; i <= n; ++i)
+      monsters[i] = nt.join(monsters[i - 1]);
+    return monsters;
+  }
 
-  MT("tagColorHex6",
-     "[tag foo] { [property background]: [atom #ffffff]; }");
+  var m1 = build_recursive_monsters(
+    ['[string "][variable-2 $]{[variable aaa] [operator +] ', '}[string "]'],
+    '[comment /* }?>} */] [string "aaa][variable-2 $aaa][string .aaa"]',
+    10
+  );
 
-  MT("tagColorHex4",
-     "[tag foo] { [property background]: [atom&error #ffff]; }");
+  MT('variable_interpolation_complex_syntax_3_1',
+     '[meta <?php] [comment /* Recursive monsters */]',
+     '[keyword echo] ' + m1[4] + ';',
+     '[keyword echo] ' + m1[7] + ';',
+     '[keyword echo] ' + m1[8] + ';',
+     '[keyword echo] ' + m1[5] + ';',
+     '[keyword echo] ' + m1[1] + ';',
+     '[keyword echo] ' + m1[6] + ';',
+     '[keyword echo] ' + m1[9] + ';',
+     '[keyword echo] ' + m1[0] + ';',
+     '[keyword echo] ' + m1[10] + ';',
+     '[keyword echo] ' + m1[2] + ';',
+     '[keyword echo] ' + m1[3] + ';',
+     '[keyword echo] [string "end"];',
+     '[meta ?>]');
 
-  MT("tagColorHexInvalid",
-     "[tag foo] { [property background]: [atom&error #ffg]; }");
+  var m2 = build_recursive_monsters(
+    ['[string "a][variable-2 $]{[variable aaa] [operator +] ', ' [operator +] ', '}[string .a"]'],
+    '[comment /* }?>{{ */] [string "a?>}{{aa][variable-2 $aaa][string .a}a?>a"]',
+    5
+  );
 
-  MT("tagNegativeNumber",
-     "[tag foo] { [property margin]: [number -5px]; }");
+  MT('variable_interpolation_complex_syntax_3_2',
+     '[meta <?php] [comment /* Recursive monsters 2 */]',
+     '[keyword echo] ' + m2[0] + ';',
+     '[keyword echo] ' + m2[1] + ';',
+     '[keyword echo] ' + m2[5] + ';',
+     '[keyword echo] ' + m2[4] + ';',
+     '[keyword echo] ' + m2[2] + ';',
+     '[keyword echo] ' + m2[3] + ';',
+     '[keyword echo] [string "end"];',
+     '[meta ?>]');
 
-  MT("tagPositiveNumber",
-     "[tag foo] { [property padding]: [number 5px]; }");
+  function build_recursive_monsters_2(mf1, mf2, nt, t, n){
+    var monsters = [t];
+    for (var i = 1; i <= n; ++i)
+      monsters[i] = nt[0] + mf1[i - 1] + nt[1] + mf2[i - 1] + nt[2] + monsters[i - 1] + nt[3];
+    return monsters;
+  }
 
-  MT("tagVendor",
-     "[tag foo] { [meta -foo-][property box-sizing]: [meta -foo-][atom border-box]; }");
+  var m3 = build_recursive_monsters_2(
+    m1,
+    m2,
+    ['[string "a][variable-2 $]{[variable aaa] [operator +] ', ' [operator +] ', ' [operator +] ', '}[string .a"]'],
+    '[comment /* }?>{{ */] [string "a?>}{{aa][variable-2 $aaa][string .a}a?>a"]',
+    4
+  );
 
-  MT("tagBogusProperty",
-     "[tag foo] { [property&error barhelloworld]: [number 0]; }");
+  MT('variable_interpolation_complex_syntax_3_3',
+     '[meta <?php] [comment /* Recursive monsters 2 */]',
+     '[keyword echo] ' + m3[4] + ';',
+     '[keyword echo] ' + m3[0] + ';',
+     '[keyword echo] ' + m3[3] + ';',
+     '[keyword echo] ' + m3[1] + ';',
+     '[keyword echo] ' + m3[2] + ';',
+     '[keyword echo] [string "end"];',
+     '[meta ?>]');
 
-  MT("tagTwoProperties",
-     "[tag foo] { [property margin]: [number 0]; [property padding]: [number 0]; }");
-
-  MT("tagTwoPropertiesURL",
-     "[tag foo] { [property background]: [atom url]([string //example.com/foo.png]); [property padding]: [number 0]; }");
-
-  MT("commentSGML",
-     "[comment <!--comment-->]");
-
-  MT("commentSGML2",
-     "[comment <!--comment]",
-     "[comment -->] [tag div] {}");
-
-  MT("indent_tagSelector",
-     "[tag strong], [tag em] {",
-     "  [property background]: [atom rgba](",
-     "    [number 255], [number 255], [number 0], [number .2]",
-     "  );",
-     "}");
-
-  MT("indent_atMedia",
-     "[def @media] {",
-     "  [tag foo] {",
-     "    [property color]:",
-     "      [keyword yellow];",
-     "  }",
-     "}");
-
-  MT("indent_comma",
-     "[tag foo] {",
-     "  [property font-family]: [variable verdana],",
-     "    [atom sans-serif];",
-     "}");
-
-  MT("indent_parentheses",
-     "[tag foo]:[variable-3 before] {",
-     "  [property background]: [atom url](",
-     "[string     blahblah]",
-     "[string     etc]",
-     "[string   ]) [keyword !important];",
-     "}");
-
-  MT("font_face",
-     "[def @font-face] {",
-     "  [property font-family]: [string 'myfont'];",
-     "  [error nonsense]: [string 'abc'];",
-     "  [property src]: [atom url]([string http://blah]),",
-     "    [atom url]([string http://foo]);",
-     "}");
-
-  MT("empty_url",
-     "[def @import] [tag url]() [tag screen];");
-
-  MT("parens",
-     "[qualifier .foo] {",
-     "  [property background-image]: [variable fade]([atom #000], [number 20%]);",
-     "  [property border-image]: [atom linear-gradient](",
-     "    [atom to] [atom bottom],",
-     "    [variable fade]([atom #000], [number 20%]) [number 0%],",
-     "    [variable fade]([atom #000], [number 20%]) [number 100%]",
-     "  );",
-     "}");
-
-  MT("css_variable",
-     ":[variable-3 root] {",
-     "  [variable-2 --main-color]: [atom #06c];",
-     "}",
-     "[tag h1][builtin #foo] {",
-     "  [property color]: [atom var]([variable-2 --main-color]);",
-     "}");
-
-  MT("supports",
-     "[def @supports] ([keyword not] (([property text-align-last]: [atom justify]) [keyword or] ([meta -moz-][property text-align-last]: [atom justify])) {",
-     "  [property text-align-last]: [atom justify];",
-     "}");
-
-   MT("document",
-      "[def @document] [tag url]([string http://blah]),",
-      "  [tag url-prefix]([string https://]),",
-      "  [tag domain]([string blah.com]),",
-      "  [tag regexp]([string \".*blah.+\"]) {",
-      "    [builtin #id] {",
-      "      [property background-color]: [keyword white];",
-      "    }",
-      "    [tag foo] {",
-      "      [property font-family]: [variable Verdana], [atom sans-serif];",
-      "    }",
-      "  }");
-
-   MT("document_url",
-      "[def @document] [tag url]([string http://blah]) { [qualifier .class] { } }");
-
-   MT("document_urlPrefix",
-      "[def @document] [tag url-prefix]([string https://]) { [builtin #id] { } }");
-
-   MT("document_domain",
-      "[def @document] [tag domain]([string blah.com]) { [tag foo] { } }");
-
-   MT("document_regexp",
-      "[def @document] [tag regexp]([string \".*blah.+\"]) { [builtin #id] { } }");
-
-   MT("counter-style",
-      "[def @counter-style] [variable binary] {",
-      "  [property system]: [atom numeric];",
-      "  [property symbols]: [number 0] [number 1];",
-      "  [property suffix]: [string \".\"];",
-      "  [property range]: [atom infinite];",
-      "  [property speak-as]: [atom numeric];",
-      "}");
-
-   MT("counter-style-additive-symbols",
-      "[def @counter-style] [variable simple-roman] {",
-      "  [property system]: [atom additive];",
-      "  [property additive-symbols]: [number 10] [variable X], [number 5] [variable V], [number 1] [variable I];",
-      "  [property range]: [number 1] [number 49];",
-      "}");
-
-   MT("counter-style-use",
-      "[tag ol][qualifier .roman] { [property list-style]: [variable simple-roman]; }");
-
-   MT("counter-style-symbols",
-      "[tag ol] { [property list-style]: [atom symbols]([atom cyclic] [string \"*\"] [string \"\\2020\"] [string \"\\2021\"] [string \"\\A7\"]); }");
+  MT("variable_interpolation_heredoc",
+     "[meta <?php]",
+     "[string <<<here]",
+     "[string doc ][variable-2 $]{[variable yay]}[string more]",
+     "[string here]; [comment // normal]");
 })();
