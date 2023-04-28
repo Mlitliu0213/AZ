@@ -1,67 +1,195 @@
 // CodeMirror, copyright (c) by Marijn Haverbeke and others
 // Distributed under an MIT license: http://codemirror.net/LICENSE
 
-// Don't take these too seriously -- the expected results appear to be
-// based on the results of actual runs without any serious manual
-// verification. If a change you made causes them to fail, the test is
-// as likely to wrong as the code.
-
 (function() {
-  var mode = CodeMirror.getMode({tabSize: 4}, "xquery");
+  var mode = CodeMirror.getMode({indentUnit: 2}, "css");
   function MT(name) { test.mode(name, mode, Array.prototype.slice.call(arguments, 1)); }
 
-  MT("eviltest",
-     "[keyword xquery] [keyword version] [variable &quot;1][keyword .][atom 0][keyword -][variable ml&quot;][def&variable ;]      [comment (: this is       : a          \"comment\" :)]",
-     "      [keyword let] [variable $let] [keyword :=] [variable &lt;x] [variable attr][keyword =][variable &quot;value&quot;&gt;&quot;test&quot;&lt;func&gt][def&variable ;function]() [variable $var] {[keyword function]()} {[variable $var]}[variable &lt;][keyword /][variable func&gt;&lt;][keyword /][variable x&gt;]",
-     "      [keyword let] [variable $joe][keyword :=][atom 1]",
-     "      [keyword return] [keyword element] [variable element] {",
-     "          [keyword attribute] [variable attribute] { [atom 1] },",
-     "          [keyword element] [variable test] { [variable &#39;a&#39;] },           [keyword attribute] [variable foo] { [variable &quot;bar&quot;] },",
-     "          [def&variable fn:doc]()[[ [variable foo][keyword /][variable @bar] [keyword eq] [variable $let] ]],",
-     "          [keyword //][variable x] }                 [comment (: a more 'evil' test :)]",
-     "      [comment (: Modified Blakeley example (: with nested comment :) ... :)]",
-     "      [keyword declare] [keyword private] [keyword function] [def&variable local:declare]() {()}[variable ;]",
-     "      [keyword declare] [keyword private] [keyword function] [def&variable local:private]() {()}[variable ;]",
-     "      [keyword declare] [keyword private] [keyword function] [def&variable local:function]() {()}[variable ;]",
-     "      [keyword declare] [keyword private] [keyword function] [def&variable local:local]() {()}[variable ;]",
-     "      [keyword let] [variable $let] [keyword :=] [variable &lt;let&gt;let] [variable $let] [keyword :=] [variable &quot;let&quot;&lt;][keyword /let][variable &gt;]",
-     "      [keyword return] [keyword element] [variable element] {",
-     "          [keyword attribute] [variable attribute] { [keyword try] { [def&variable xdmp:version]() } [keyword catch]([variable $e]) { [def&variable xdmp:log]([variable $e]) } },",
-     "          [keyword attribute] [variable fn:doc] { [variable &quot;bar&quot;] [variable castable] [keyword as] [atom xs:string] },",
-     "          [keyword element] [variable text] { [keyword text] { [variable &quot;text&quot;] } },",
-     "          [def&variable fn:doc]()[[ [qualifier child::][variable eq][keyword /]([variable @bar] [keyword |] [qualifier attribute::][variable attribute]) [keyword eq] [variable $let] ]],",
-     "          [keyword //][variable fn:doc]",
-     "      }");
+  // Error, because "foobarhello" is neither a known type or property, but
+  // property was expected (after "and"), and it should be in parenthese.
+  MT("atMediaUnknownType",
+     "[def @media] [attribute screen] [keyword and] [error foobarhello] { }");
 
-  MT("testEmptySequenceKeyword",
-     "[string \"foo\"] [keyword instance] [keyword of] [keyword empty-sequence]()");
+  // Soft error, because "foobarhello" is not a known property or type.
+  MT("atMediaUnknownProperty",
+     "[def @media] [attribute screen] [keyword and] ([error foobarhello]) { }");
 
-  MT("testMultiAttr",
-     "[tag <p ][attribute a1]=[string \"foo\"] [attribute a2]=[string \"bar\"][tag >][variable hello] [variable world][tag </p>]");
+  // Make sure nesting works with media queries
+  MT("atMediaMaxWidthNested",
+     "[def @media] [attribute screen] [keyword and] ([property max-width]: [number 25px]) { [tag foo] { } }");
 
-  MT("test namespaced variable",
-     "[keyword declare] [keyword namespace] [variable e] [keyword =] [string \"http://example.com/ANamespace\"][variable ;declare] [keyword variable] [variable $e:exampleComThisVarIsNotRecognized] [keyword as] [keyword element]([keyword *]) [variable external;]");
+  MT("tagSelector",
+     "[tag foo] { }");
 
-  MT("test EQName variable",
-     "[keyword declare] [keyword variable] [variable $\"http://www.example.com/ns/my\":var] [keyword :=] [atom 12][variable ;]",
-     "[tag <out>]{[variable $\"http://www.example.com/ns/my\":var]}[tag </out>]");
+  MT("classSelector",
+     "[qualifier .foo-bar_hello] { }");
 
-  MT("test EQName function",
-     "[keyword declare] [keyword function] [def&variable \"http://www.example.com/ns/my\":fn] ([variable $a] [keyword as] [atom xs:integer]) [keyword as] [atom xs:integer] {",
-     "   [variable $a] [keyword +] [atom 2]",
-     "}[variable ;]",
-     "[tag <out>]{[def&variable \"http://www.example.com/ns/my\":fn]([atom 12])}[tag </out>]");
+  MT("idSelector",
+     "[builtin #foo] { [error #foo] }");
 
-  MT("test EQName function with single quotes",
-     "[keyword declare] [keyword function] [def&variable 'http://www.example.com/ns/my':fn] ([variable $a] [keyword as] [atom xs:integer]) [keyword as] [atom xs:integer] {",
-     "   [variable $a] [keyword +] [atom 2]",
-     "}[variable ;]",
-     "[tag <out>]{[def&variable 'http://www.example.com/ns/my':fn]([atom 12])}[tag </out>]");
+  MT("tagSelectorUnclosed",
+     "[tag foo] { [property margin]: [number 0] } [tag bar] { }");
 
-  MT("testProcessingInstructions",
-     "[def&variable data]([comment&meta <?target content?>]) [keyword instance] [keyword of] [atom xs:string]");
+  MT("tagStringNoQuotes",
+     "[tag foo] { [property font-family]: [variable hello] [variable world]; }");
 
-  MT("testQuoteEscapeDouble",
-     "[keyword let] [variable $rootfolder] [keyword :=] [string \"c:\\builds\\winnt\\HEAD\\qa\\scripts\\\"]",
-     "[keyword let] [variable $keysfolder] [keyword :=] [def&variable concat]([variable $rootfolder], [string \"keys\\\"])");
+  MT("tagStringDouble",
+     "[tag foo] { [property font-family]: [string \"hello world\"]; }");
+
+  MT("tagStringSingle",
+     "[tag foo] { [property font-family]: [string 'hello world']; }");
+
+  MT("tagColorKeyword",
+     "[tag foo] {",
+     "  [property color]: [keyword black];",
+     "  [property color]: [keyword navy];",
+     "  [property color]: [keyword yellow];",
+     "}");
+
+  MT("tagColorHex3",
+     "[tag foo] { [property background]: [atom #fff]; }");
+
+  MT("tagColorHex6",
+     "[tag foo] { [property background]: [atom #ffffff]; }");
+
+  MT("tagColorHex4",
+     "[tag foo] { [property background]: [atom&error #ffff]; }");
+
+  MT("tagColorHexInvalid",
+     "[tag foo] { [property background]: [atom&error #ffg]; }");
+
+  MT("tagNegativeNumber",
+     "[tag foo] { [property margin]: [number -5px]; }");
+
+  MT("tagPositiveNumber",
+     "[tag foo] { [property padding]: [number 5px]; }");
+
+  MT("tagVendor",
+     "[tag foo] { [meta -foo-][property box-sizing]: [meta -foo-][atom border-box]; }");
+
+  MT("tagBogusProperty",
+     "[tag foo] { [property&error barhelloworld]: [number 0]; }");
+
+  MT("tagTwoProperties",
+     "[tag foo] { [property margin]: [number 0]; [property padding]: [number 0]; }");
+
+  MT("tagTwoPropertiesURL",
+     "[tag foo] { [property background]: [atom url]([string //example.com/foo.png]); [property padding]: [number 0]; }");
+
+  MT("commentSGML",
+     "[comment <!--comment-->]");
+
+  MT("commentSGML2",
+     "[comment <!--comment]",
+     "[comment -->] [tag div] {}");
+
+  MT("indent_tagSelector",
+     "[tag strong], [tag em] {",
+     "  [property background]: [atom rgba](",
+     "    [number 255], [number 255], [number 0], [number .2]",
+     "  );",
+     "}");
+
+  MT("indent_atMedia",
+     "[def @media] {",
+     "  [tag foo] {",
+     "    [property color]:",
+     "      [keyword yellow];",
+     "  }",
+     "}");
+
+  MT("indent_comma",
+     "[tag foo] {",
+     "  [property font-family]: [variable verdana],",
+     "    [atom sans-serif];",
+     "}");
+
+  MT("indent_parentheses",
+     "[tag foo]:[variable-3 before] {",
+     "  [property background]: [atom url](",
+     "[string     blahblah]",
+     "[string     etc]",
+     "[string   ]) [keyword !important];",
+     "}");
+
+  MT("font_face",
+     "[def @font-face] {",
+     "  [property font-family]: [string 'myfont'];",
+     "  [error nonsense]: [string 'abc'];",
+     "  [property src]: [atom url]([string http://blah]),",
+     "    [atom url]([string http://foo]);",
+     "}");
+
+  MT("empty_url",
+     "[def @import] [tag url]() [tag screen];");
+
+  MT("parens",
+     "[qualifier .foo] {",
+     "  [property background-image]: [variable fade]([atom #000], [number 20%]);",
+     "  [property border-image]: [atom linear-gradient](",
+     "    [atom to] [atom bottom],",
+     "    [variable fade]([atom #000], [number 20%]) [number 0%],",
+     "    [variable fade]([atom #000], [number 20%]) [number 100%]",
+     "  );",
+     "}");
+
+  MT("css_variable",
+     ":[variable-3 root] {",
+     "  [variable-2 --main-color]: [atom #06c];",
+     "}",
+     "[tag h1][builtin #foo] {",
+     "  [property color]: [atom var]([variable-2 --main-color]);",
+     "}");
+
+  MT("supports",
+     "[def @supports] ([keyword not] (([property text-align-last]: [atom justify]) [keyword or] ([meta -moz-][property text-align-last]: [atom justify])) {",
+     "  [property text-align-last]: [atom justify];",
+     "}");
+
+   MT("document",
+      "[def @document] [tag url]([string http://blah]),",
+      "  [tag url-prefix]([string https://]),",
+      "  [tag domain]([string blah.com]),",
+      "  [tag regexp]([string \".*blah.+\"]) {",
+      "    [builtin #id] {",
+      "      [property background-color]: [keyword white];",
+      "    }",
+      "    [tag foo] {",
+      "      [property font-family]: [variable Verdana], [atom sans-serif];",
+      "    }",
+      "  }");
+
+   MT("document_url",
+      "[def @document] [tag url]([string http://blah]) { [qualifier .class] { } }");
+
+   MT("document_urlPrefix",
+      "[def @document] [tag url-prefix]([string https://]) { [builtin #id] { } }");
+
+   MT("document_domain",
+      "[def @document] [tag domain]([string blah.com]) { [tag foo] { } }");
+
+   MT("document_regexp",
+      "[def @document] [tag regexp]([string \".*blah.+\"]) { [builtin #id] { } }");
+
+   MT("counter-style",
+      "[def @counter-style] [variable binary] {",
+      "  [property system]: [atom numeric];",
+      "  [property symbols]: [number 0] [number 1];",
+      "  [property suffix]: [string \".\"];",
+      "  [property range]: [atom infinite];",
+      "  [property speak-as]: [atom numeric];",
+      "}");
+
+   MT("counter-style-additive-symbols",
+      "[def @counter-style] [variable simple-roman] {",
+      "  [property system]: [atom additive];",
+      "  [property additive-symbols]: [number 10] [variable X], [number 5] [variable V], [number 1] [variable I];",
+      "  [property range]: [number 1] [number 49];",
+      "}");
+
+   MT("counter-style-use",
+      "[tag ol][qualifier .roman] { [property list-style]: [variable simple-roman]; }");
+
+   MT("counter-style-symbols",
+      "[tag ol] { [property list-style]: [atom symbols]([atom cyclic] [string \"*\"] [string \"\\2020\"] [string \"\\2021\"] [string \"\\A7\"]); }");
 })();
