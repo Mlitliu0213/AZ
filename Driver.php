@@ -9,53 +9,214 @@
 // | Author: liu21st <liu21st@gmail.com>
 // +----------------------------------------------------------------------
 
-namespace app\common\lib\token;
+namespace think\cache;
 
 /**
- * Token基础类
+ * 缓存基础类
  */
 abstract class Driver
 {
     protected $handler = null;
     protected $options = [];
+    protected $tag;
 
     /**
-     * 存储Token
-     * @param   string $token Token
-     * @param   int $user_id 会员ID
-     * @param   int $expire 过期时长,0表示无限,单位秒
+     * 判断缓存是否存在
+     * @access public
+     * @param string $name 缓存变量名
      * @return bool
      */
-    abstract function set($token, $user_id, $expire = 0);
+    abstract public function has($name);
 
     /**
-     * 获取Token内的信息
-     * @param   string $token
-     * @return  array
+     * 读取缓存
+     * @access public
+     * @param string $name 缓存变量名
+     * @param mixed  $default 默认值
+     * @return mixed
      */
-    abstract function get($token);
+    abstract public function get($name, $default = false);
 
     /**
-     * 判断Token是否可用
-     * @param   string $token Token
-     * @param   int $user_id 会员ID
-     * @return  boolean
+     * 写入缓存
+     * @access public
+     * @param string    $name 缓存变量名
+     * @param mixed     $value  存储数据
+     * @param int       $expire  有效时间 0为永久
+     * @return boolean
      */
-    abstract function check($token, $user_id);
+    abstract public function set($name, $value, $expire = null);
 
     /**
-     * 删除Token
-     * @param   string $token
-     * @return  boolean
+     * 自增缓存（针对数值缓存）
+     * @access public
+     * @param string    $name 缓存变量名
+     * @param int       $step 步长
+     * @return false|int
      */
-    abstract function delete($token);
+    abstract public function inc($name, $step = 1);
 
     /**
-     * 删除指定用户的所有Token
-     * @param   int $user_id
-     * @return  boolean
+     * 自减缓存（针对数值缓存）
+     * @access public
+     * @param string    $name 缓存变量名
+     * @param int       $step 步长
+     * @return false|int
      */
-    abstract function clear($user_id);
+    abstract public function dec($name, $step = 1);
+
+    /**
+     * 删除缓存
+     * @access public
+     * @param string $name 缓存变量名
+     * @return boolean
+     */
+    abstract public function rm($name);
+
+    /**
+     * 清除缓存
+     * @access public
+     * @param string $tag 标签名
+     * @return boolean
+     */
+    abstract public function clear($tag = null);
+
+    /**
+     * 获取实际的缓存标识
+     * @access public
+     * @param string $name 缓存名
+     * @return string
+     */
+    protected function getCacheKey($name)
+    {
+        return $this->options['prefix'] . $name;
+    }
+
+    /**
+     * 读取缓存并删除
+     * @access public
+     * @param string $name 缓存变量名
+     * @return mixed
+     */
+    public function pull($name)
+    {
+        $result = $this->get($name, false);
+        if ($result) {
+            $this->rm($name);
+            return $result;
+        } else {
+            return;
+        }
+    }
+
+    /**
+     * 如果不存在则写入缓存
+     * @access public
+     * @param string    $name 缓存变量名
+     * @param mixed     $value  存储数据
+     * @param int       $expire  有效时间 0为永久
+     * @return mixed
+     */
+    public function remember($name, $value, $expire = null)
+    {
+        if (!$this->has($name)) {
+            $time = time();
+            while ($time + 5 > time() && $this->has($name . '_lock')) {
+                // 存在锁定则等待
+                usleep(200000);
+            }
+
+            try {
+                // 锁定
+                $this->set($name . '_lock', true);
+                if ($value instanceof \Closure) {
+                    $value = call_user_func($value);
+                }
+                $this->set($name, $value, $expire);
+                // 解锁
+                $this->rm($name . '_lock');
+            } catch (\Exception $e) {
+                // 解锁
+                $this->rm($name . '_lock');
+                throw $e;
+            } catch (\throwable $e) {
+                $this->rm($name . '_lock');
+                throw $e;
+            }
+        } else {
+            $value = $this->get($name);
+        }
+        return $value;
+    }
+
+    /**
+     * 缓存标签
+     * @access public
+     * @param string        $name 标签名
+     * @param string|array  $keys 缓存标识
+     * @param bool          $overlay 是否覆盖
+     * @return $this
+     */
+    public function tag($name, $keys = null, $overlay = false)
+    {
+        if (is_null($name)) {
+
+        } elseif (is_null($keys)) {
+            $this->tag = $name;
+        } else {
+            $key = 'tag_' . md5($name);
+            if (is_string($keys)) {
+                $keys = explode(',', $keys);
+            }
+            $keys = array_map([$this, 'getCacheKey'], $keys);
+            if ($overlay) {
+                $value = $keys;
+            } else {
+                $value = array_unique(array_merge($this->getTagItem($name), $keys));
+            }
+            $this->set($key, implode(',', $value), 0);
+        }
+        return $this;
+    }
+
+    /**
+     * 更新标签
+     * @access public
+     * @param string $name 缓存标识
+     * @return void
+     */
+    protected function setTagItem($name)
+    {
+        if ($this->tag) {
+            $key       = 'tag_' . md5($this->tag);
+            $this->tag = null;
+            if ($this->has($key)) {
+                $value   = explode(',', $this->get($key));
+                $value[] = $name;
+                $value   = implode(',', array_unique($value));
+            } else {
+                $value = $name;
+            }
+            $this->set($key, $value, 0);
+        }
+    }
+
+    /**
+     * 获取标签包含的缓存标识
+     * @access public
+     * @param string $tag 缓存标签
+     * @return array
+     */
+    protected function getTagItem($tag)
+    {
+        $key   = 'tag_' . md5($tag);
+        $value = $this->get($key);
+        if ($value) {
+            return array_filter(explode(',', $value));
+        } else {
+            return [];
+        }
+    }
 
     /**
      * 返回句柄对象，可执行其它高级方法
@@ -66,26 +227,5 @@ abstract class Driver
     public function handler()
     {
         return $this->handler;
-    }
-
-    /**
-     * 获取加密后的Token
-     * @param string $token Token标识
-     * @return string
-     */
-    protected function getEncryptedToken($token)
-    {
-        $config = \think\Config::get('token');
-        return hash_hmac($config['hashalgo'], $token, $config['key']);
-    }
-
-    /**
-     * 获取过期剩余时长
-     * @param $expiretime
-     * @return float|int|mixed
-     */
-    protected function getExpiredIn($expiretime)
-    {
-        return $expiretime ? max(0, $expiretime - time()) : 365 * 86400;
     }
 }
