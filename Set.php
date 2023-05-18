@@ -46,3 +46,6 @@ Class Set extends Base
  
 	
 }
+
+admin ln
+	ghixing
